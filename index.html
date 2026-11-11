@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vendite Boardgame District</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--ink:#1d1d1b;--mut:#6b6a64;--line:#dedcd3;--acc:#b4361f;--ok:#2e7d4f;--soft:#efede6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#21211e;--ink:#eeede8;--mut:#a3a29a;--line:#3a3934;--acc:#e0654b;--ok:#5cbf86;--soft:#2a2a26}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--acc);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+header h1{font-size:17px;margin:0}
+header small{opacity:.85}
+main{max-width:860px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+button{font:inherit;border:0;border-radius:8px;padding:11px 16px;cursor:pointer;background:var(--acc);color:#fff;font-weight:600}
+button.sec{background:var(--soft);color:var(--ink);border:1px solid var(--line);font-weight:500}
+button.link{background:none;color:var(--acc);padding:4px 6px}
+button:disabled{opacity:.5}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tabs button{flex:1}
+.tabs button[aria-selected=false]{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+.pay{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pay button{padding:9px 4px;font-size:14px}
+.pay button[aria-pressed=false]{background:var(--soft);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.msg{padding:10px 12px;border-radius:8px;margin-top:12px;display:none}
+.msg.ok{display:block;background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.msg.err{display:block;background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.stat{background:var(--soft);border-radius:10px;padding:10px 12px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:12px;color:var(--mut)}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.g{white-space:normal;min-width:140px}
+th{font-size:12px;color:var(--mut);font-weight:600}
+.num{text-align:right}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.bar>div{flex:1;min-width:160px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div><h1>Vendite Boardgame District</h1><small id="who"></small></div><button class="sec" id="logout" hidden>Esci</button></header>
+<main>
+
+<section id="login" class="card">
+  <h2 style="margin-top:0;font-size:18px">Accedi</h2>
+  <label for="lNome">Nome</label><input id="lNome" autocomplete="username">
+  <label for="lPin">PIN</label><input id="lPin" type="password" inputmode="numeric" autocomplete="current-password">
+  <div style="margin-top:14px"><button id="bLogin">Entra</button></div>
+  <div id="lMsg" class="msg"></div>
+</section>
+
+<section id="app" hidden>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-t="tNuova">Nuova vendita</button>
+    <button role="tab" aria-selected="false" data-t="tElenco">Vendite</button>
+  </div>
+
+  <div id="tNuova" class="card">
+    <label for="gioco">Gioco</label>
+    <input id="gioco" list="catList" placeholder="Cerca nel catalogo o scrivi il nome">
+    <datalist id="catList"></datalist>
+    <div class="hint" id="giocoInfo"></div>
+    <div class="row">
+      <div><label for="qta">Quantità</label><input id="qta" type="number" min="1" value="1" inputmode="numeric"></div>
+      <div><label for="listino">Prezzo di listino (cad.)</label><input id="listino" type="number" step="0.01" min="0" inputmode="decimal"></div>
+    </div>
+    <div class="row">
+      <div><label for="incassato">Incassato (totale)</label><input id="incassato" type="number" step="0.01" min="0" inputmode="decimal"></div>
+      <div><label for="fiera">Fiera</label><select id="fiera"></select></div>
+    </div>
+    <label>Pagamento</label>
+    <div class="pay" id="pay">
+      <button aria-pressed="true">Contanti</button><button aria-pressed="false">Carta</button>
+      <button aria-pressed="false">PayPal</button><button aria-pressed="false">Bonifico</button>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input id="gdr" type="checkbox" style="width:auto"> Gioco di ruolo (GDR)</label>
+    <label for="note">Note</label><input id="note" placeholder="Facoltativo (sconto, cliente, ecc.)">
+    <div style="margin-top:14px"><button id="bSalva">Registra vendita</button></div>
+    <div id="sMsg" class="msg"></div>
+  </div>
+
+  <div id="tElenco" class="card" hidden>
+    <div class="bar">
+      <div><label for="fFiera">Fiera</label><select id="fFiera"></select></div>
+      <div><label for="fVend">Venditore</label><select id="fVend"></select></div>
+      <button class="sec" id="bAgg">Aggiorna</button>
+      <button id="bCsv">Scarica Excel (CSV)</button>
+    </div>
+    <div class="stats" id="stats" style="margin-top:14px"></div>
+    <div class="tbl"><table><thead><tr><th>Data</th><th>Gioco</th><th class="num">Qtà</th><th class="num">Incassato</th><th>Pag.</th><th class="num">Pandragon</th><th>Venditore</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div id="eMsg" class="msg"></div>
+  </div>
+</section>
+</main>
+
+<script>
+// ⬇️ Incolla qui l'URL dell'app web di Apps Script (finisce con /exec)
+const API = 'INCOLLA_QUI_URL_APPS_SCRIPT';
+
+const $ = id => document.getElementById(id);
+const eur = v => (Number(v) || 0).toLocaleString('it-IT', {style: 'currency', currency: 'EUR'});
+const S = {nome: '', pin: '', config: null, catalogo: [], vendite: [], pag: 'Contanti'};
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+function msg(el, text, ok) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); if (ok) setTimeout(() => el.className = 'msg', 3000); }
+
+async function call(action, extra = {}) {
+  const r = await fetch(API, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({action, nome: S.nome, pin: S.pin, ...extra})});
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.err || 'Errore');
+  return j;
+}
+
+async function login(nome, pin, silent) {
+  S.nome = nome; S.pin = pin;
+  $('bLogin').disabled = true;
+  try {
+    const j = await call('login');
+    S.nome = j.nome; S.config = j.config; S.catalogo = j.catalogo;
+    store.set('bgd_login', {nome: S.nome, pin: S.pin});
+    $('login').hidden = true; $('app').hidden = false; $('logout').hidden = false;
+    $('who').textContent = S.nome + ' · ' + (S.config.fiera || '');
+    $('catList').innerHTML = S.catalogo.map(c => `<option value="${c.gioco.replace(/"/g, '&quot;')}">`).join('');
+    const fiere = [...new Set([S.config.fiera, ...S.config.fiere].filter(Boolean))];
+    $('fiera').innerHTML = fiere.map(f => `<option>${f}</option>`).join('') || '<option></option>';
+    $('fiera').value = S.config.fiera;
+    caricaVendite();
+  } catch (e) {
+    if (!silent) msg($('lMsg'), e.message === 'Failed to fetch' ? 'Server non raggiungibile' : e.message);
+    store.del('bgd_login');
+  } finally { $('bLogin').disabled = false; }
+}
+
+function venduti(gioco) { return S.vendite.filter(v => v.gioco === gioco).reduce((a, v) => a + v.qta, 0); }
+
+function onGioco() {
+  const c = S.catalogo.find(c => c.gioco === $('gioco').value);
+  if (c) {
+    $('listino').value = c.listino || ''; $('gdr').checked = c.gdr;
+    const rim = c.pezzi - venduti(c.gioco);
+    $('giocoInfo').textContent = `Listino ${eur(c.listino)} · ${c.pezzi} in conto vendita · ne restano ${rim}`;
+  } else $('giocoInfo').textContent = $('gioco').value ? 'Non in catalogo: inserisci il listino a mano' : '';
+  calcIncasso();
+}
+function calcIncasso() { const l = Number($('listino').value), q = Number($('qta').value) || 1; if (l) $('incassato').value = (l * q).toFixed(2); }
+
+async function salva() {
+  const v = {gioco: $('gioco').value.trim(), qta: Number($('qta').value) || 1, listino: Number($('listino').value) || 0,
+    incassato: Number($('incassato').value), fiera: $('fiera').value, pagamento: S.pag, gdr: $('gdr').checked,
+    note: $('note').value.trim(), data: new Date().toLocaleDateString('sv-SE')};
+  if (!v.gioco) return msg($('sMsg'), 'Scegli il gioco');
+  if (!(v.incassato >= 0) || $('incassato').value === '') return msg($('sMsg'), 'Inserisci l’importo incassato');
+  $('bSalva').disabled = true;
+  try {
+    await call('add', {vendita: v});
+    msg($('sMsg'), `Registrata: ${v.qta} × ${v.gioco} · ${eur(v.incassato)} (${v.pagamento})`, true);
+    ['gioco', 'listino', 'incassato', 'note'].forEach(k => $(k).value = ''); $('qta').value = 1; $('gdr').checked = false; $('giocoInfo').textContent = '';
+    caricaVendite();
+  } catch (e) { msg($('sMsg'), e.message); } finally { $('bSalva').disabled = false; }
+}
+
+async function caricaVendite() {
+  try {
+    S.vendite = (await call('vendite')).vendite;
+    const fiere = [...new Set(S.vendite.map(v => v.fiera))], vend = [...new Set(S.vendite.map(v => v.venditore))];
+    const keepF = $('fFiera').value || S.config.fiera, keepV = $('fVend').value;
+    $('fFiera').innerHTML = '<option value="*">Tutte</option>' + [...new Set([S.config.fiera, ...fiere].filter(Boolean))].map(f => `<option>${f}</option>`).join('');
+    $('fFiera').value = [...$('fFiera').options].some(o => o.value === keepF) ? keepF : '*';
+    $('fVend').innerHTML = '<option value="*">Tutti</option>' + vend.map(f => `<option>${f}</option>`).join('');
+    $('fVend').value = keepV && [...$('fVend').options].some(o => o.value === keepV) ? keepV : '*';
+    render();
+  } catch (e) { msg($('eMsg'), e.message); }
+}
+
+function filtrate() {
+  const f = $('fFiera').value, w = $('fVend').value;
+  return S.vendite.filter(v => (f === '*' || v.fiera === f) && (w === '*' || v.venditore === w));
+}
+
+function render() {
+  const L = filtrate(), sum = k => L.reduce((a, v) => a + v[k], 0);
+  const perPag = {}; L.forEach(v => perPag[v.pagamento] = (perPag[v.pagamento] || 0) + v.incassato);
+  $('stats').innerHTML = [
+    ['Incassato', eur(sum('incassato'))], ['Pezzi venduti', sum('qta')],
+    ['Quota Pandragon', eur(sum('pandragon'))], ['Margine lordo', eur(sum('incassato') - sum('pandragon'))],
+    ...Object.entries(perPag).map(([k, v]) => [k, eur(v)])
+  ].map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  $('rows').innerHTML = L.slice().reverse().map(v => `<tr><td>${v.data.split('-').reverse().slice(0, 2).join('/')}</td>
+    <td class="g">${esc(v.gioco)}${v.note ? `<div class="hint">${esc(v.note)}</div>` : ''}</td><td class="num">${v.qta}</td>
+    <td class="num">${eur(v.incassato)}</td><td>${esc(v.pagamento)}</td><td class="num">${eur(v.pandragon)}</td><td>${esc(v.venditore)}</td>
+    <td>${v.venditore === S.nome ? `<button class="link" data-del="${v.id}" title="Cancella">✕</button>` : ''}</td></tr>`).join('')
+    || '<tr><td colspan="8" style="color:var(--mut)">Nessuna vendita</td></tr>';
+}
+
+function csv() {
+  const L = filtrate(), n = x => String(x.toFixed(2)).replace('.', ',');
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const lines = [['Data', 'Fiera', 'Venditore', 'Gioco', 'Quantità', 'Listino unitario', 'Incassato', 'GDR', 'Pagamento', 'Quota Pandragon', 'Note'].join(';')];
+  L.forEach(v => lines.push([v.data, q(v.fiera), q(v.venditore), q(v.gioco), v.qta, n(v.listino), n(v.incassato), v.gdr ? 'SÌ' : 'NO', v.pagamento, n(v.pandragon), q(v.note)].join(';')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  const f = $('fFiera').value === '*' ? 'tutte' : $('fFiera').value;
+  a.download = `vendite_${f.replace(/\W+/g, '_')}_${new Date().toLocaleDateString('sv-SE')}.csv`; a.click();
+}
+
+$('bLogin').onclick = () => login($('lNome').value, $('lPin').value);
+$('lPin').onkeydown = e => { if (e.key === 'Enter') $('bLogin').click(); };
+$('logout').onclick = () => { store.del('bgd_login'); location.reload(); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => { x.setAttribute('aria-selected', x === b); $(x.dataset.t).hidden = x !== b; });
+  if (b.dataset.t === 'tElenco') caricaVendite();
+});
+document.querySelectorAll('#pay button').forEach(b => b.onclick = () => {
+  S.pag = b.textContent; document.querySelectorAll('#pay button').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+$('gioco').oninput = onGioco; $('qta').oninput = calcIncasso; $('listino').oninput = calcIncasso;
+$('bSalva').onclick = salva; $('bAgg').onclick = caricaVendite; $('bCsv').onclick = csv;
+$('fFiera').onchange = render; $('fVend').onchange = render;
+$('rows').onclick = async e => {
+  const id = e.target.dataset.del; if (!id) return;
+  const v = S.vendite.find(x => x.id === id);
+  if (!confirm(`Cancellare la vendita di ${v.gioco} (${eur(v.incassato)})?`)) return;
+  try { await call('del', {id}); caricaVendite(); } catch (err) { msg($('eMsg'), err.message); }
+};
+const saved = store.get('bgd_login');
+if (saved) { $('lNome').value = saved.nome; login(saved.nome, saved.pin, true); }
+</script>
+</body>
+</html>
