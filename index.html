@@ -43,6 +43,8 @@ td.g{white-space:normal;min-width:140px}
 th{font-size:12px;color:var(--mut);font-weight:600}
 .num{text-align:right}
 .hint{font-size:12px;color:var(--mut);margin-top:4px}
+.h2{font-size:16px;margin:0 0 6px}
+textarea{resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:13px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
 .bar>div{flex:1;min-width:160px}
 [hidden]{display:none!important}
@@ -64,6 +66,7 @@ th{font-size:12px;color:var(--mut);font-weight:600}
   <div class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-t="tNuova">Nuova vendita</button>
     <button role="tab" aria-selected="false" data-t="tElenco">Vendite</button>
+    <button role="tab" aria-selected="false" data-t="tCat">Catalogo</button>
   </div>
 
   <div id="tNuova" class="card">
@@ -101,6 +104,47 @@ th{font-size:12px;color:var(--mut);font-weight:600}
     <div class="tbl"><table><thead><tr><th>Data</th><th>Gioco</th><th class="num">Qtà</th><th class="num">Incassato</th><th>Pag.</th><th class="num">Pandragon</th><th>Venditore</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <div id="eMsg" class="msg"></div>
   </div>
+  <div id="tCat" hidden>
+    <div class="card">
+      <h2 class="h2">Riepilogo conto vendita</h2>
+      <div class="bar">
+        <div><label for="rFiera">Fiera</label><select id="rFiera"></select></div>
+        <button id="bRend">Scarica venduti (CSV)</button>
+        <button class="sec" id="bCatCsv">Scarica catalogo (CSV)</button>
+      </div>
+      <div class="stats" id="cStats" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2" id="fTitle">Aggiungi titolo</h2>
+      <label for="cGioco">Titolo</label><input id="cGioco">
+      <div class="row">
+        <div><label for="cPrezzo">Prezzo di listino</label><input id="cPrezzo" type="number" step="0.01" min="0" inputmode="decimal"></div>
+        <div><label for="cPezzi">Pezzi in conto vendita</label><input id="cPezzi" type="number" min="0" step="1" inputmode="numeric"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input id="cGdr" type="checkbox" style="width:auto"> Gioco di ruolo (GDR)</label>
+      <div style="margin-top:14px;display:flex;gap:8px"><button id="bCatSalva">Salva titolo</button><button class="sec" id="bCatAnn" hidden>Annulla modifica</button></div>
+      <div id="cMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Importa una lista</h2>
+      <p class="hint" style="margin-top:0">Una riga per titolo, nell’ordine <b>Titolo ; Prezzo ; Pezzi ; GDR (SÌ/NO, facoltativo)</b>. Puoi incollare le colonne copiate da Excel o caricare un file .csv. I titoli già presenti vengono aggiornati, i nuovi aggiunti.</p>
+      <textarea id="iTxt" rows="7" placeholder="Castle Combo;24,99;5&#10;Faraway;24,99;2&#10;Manuale del Master;39,90;2;SÌ"></textarea>
+      <div class="bar" style="margin-top:8px">
+        <div><label for="iFile">Oppure scegli un file CSV</label><input id="iFile" type="file" accept=".csv,.txt,text/csv,text/plain"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input id="iSost" type="checkbox" style="width:auto"> Sostituisci l’intero catalogo (i titoli non in lista vengono eliminati)</label>
+      <div class="hint" id="iPrev"></div>
+      <div style="margin-top:10px"><button id="bImp">Importa</button></div>
+      <div id="iMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="bar"><div><label for="cCerca">Cerca nel catalogo</label><input id="cCerca" placeholder="Nome del gioco"></div></div>
+      <div class="tbl" style="margin-top:10px"><table><thead><tr><th>Titolo</th><th class="num">Listino</th><th class="num">Pezzi</th><th class="num">Venduti</th><th class="num">Restano</th><th></th></tr></thead><tbody id="cRows"></tbody></table></div>
+    </div>
+  </div>
 </section>
 </main>
 
@@ -110,7 +154,7 @@ const API = 'https://script.google.com/macros/s/AKfycbwaKotYetIgIAVDmRRDLtbb7w6U
 
 const $ = id => document.getElementById(id);
 const eur = v => (Number(v) || 0).toLocaleString('it-IT', {style: 'currency', currency: 'EUR'});
-const S = {nome: '', pin: '', config: null, catalogo: [], vendite: [], pag: 'Contanti'};
+const S = {nome: '', pin: '', ruolo: 'venditore', edit: null, config: null, catalogo: [], vendite: [], pag: 'Contanti'};
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
@@ -133,11 +177,14 @@ async function login(nome, pin, silent) {
   $('bLogin').disabled = true;
   try {
     const j = await call('login');
-    S.nome = j.nome; S.config = j.config; S.catalogo = j.catalogo;
+    S.nome = j.nome; S.ruolo = j.ruolo || 'venditore'; S.config = j.config; S.catalogo = j.catalogo;
+    const vis = {venditore: ['tNuova', 'tElenco'], negoziante: ['tCat', 'tElenco'], admin: ['tNuova', 'tElenco', 'tCat']}[S.ruolo];
+    document.querySelectorAll('.tabs button').forEach(b => b.hidden = !vis.includes(b.dataset.t));
+    apriTab(vis[0]);
+    setCatalogo(S.catalogo);
     store.set('bgd_login', {nome: S.nome, pin: S.pin});
     $('login').hidden = true; $('app').hidden = false; $('logout').hidden = false;
-    $('who').textContent = S.nome + ' · ' + (S.config.fiera || '');
-    $('catList').innerHTML = S.catalogo.map(c => `<option value="${c.gioco.replace(/"/g, '&quot;')}">`).join('');
+    $('who').textContent = S.nome + (S.ruolo === 'negoziante' ? ' · negoziante' : ' · ' + (S.config.fiera || ''));
     const fiere = [...new Set([S.config.fiera, ...S.config.fiere].filter(Boolean))];
     $('fiera').innerHTML = fiere.map(f => `<option>${f}</option>`).join('') || '<option></option>';
     $('fiera').value = S.config.fiera;
@@ -185,7 +232,9 @@ async function caricaVendite() {
     $('fFiera').value = [...$('fFiera').options].some(o => o.value === keepF) ? keepF : '*';
     $('fVend').innerHTML = '<option value="*">Tutti</option>' + vend.map(f => `<option>${f}</option>`).join('');
     $('fVend').value = keepV && [...$('fVend').options].some(o => o.value === keepV) ? keepV : '*';
-    render();
+    const keepR = $('rFiera').value; $('rFiera').innerHTML = $('fFiera').innerHTML;
+    $('rFiera').value = keepR && [...$('rFiera').options].some(o => o.value === keepR) ? keepR : $('fFiera').value;
+    render(); renderCat();
   } catch (e) { msg($('eMsg'), e.message); }
 }
 
@@ -206,7 +255,7 @@ function render() {
   $('rows').innerHTML = L.slice().reverse().map(v => `<tr><td>${v.data.split('-').reverse().slice(0, 2).join('/')}</td>
     <td class="g">${esc(v.gioco)}${v.note ? `<div class="hint">${esc(v.note)}</div>` : ''}</td><td class="num">${v.qta}</td>
     <td class="num">${eur(v.incassato)}</td><td>${esc(v.pagamento)}</td><td class="num">${eur(v.pandragon)}</td><td>${esc(v.venditore)}</td>
-    <td>${v.venditore === S.nome ? `<button class="link" data-del="${v.id}" title="Cancella">✕</button>` : ''}</td></tr>`).join('')
+    <td>${v.venditore === S.nome || S.ruolo === 'admin' ? `<button class="link" data-del="${v.id}" title="Cancella">✕</button>` : ''}</td></tr>`).join('')
     || '<tr><td colspan="8" style="color:var(--mut)">Nessuna vendita</td></tr>';
 }
 
@@ -224,10 +273,124 @@ function csv() {
 $('bLogin').onclick = () => login($('lNome').value, $('lPin').value);
 $('lPin').onkeydown = e => { if (e.key === 'Enter') $('bLogin').click(); };
 $('logout').onclick = () => { store.del('bgd_login'); location.reload(); };
-document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.tabs button').forEach(x => { x.setAttribute('aria-selected', x === b); $(x.dataset.t).hidden = x !== b; });
-  if (b.dataset.t === 'tElenco') caricaVendite();
-});
+function apriTab(t) {
+  document.querySelectorAll('.tabs button').forEach(x => { x.setAttribute('aria-selected', x.dataset.t === t); $(x.dataset.t).hidden = x.dataset.t !== t; });
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { apriTab(b.dataset.t); if (b.dataset.t !== 'tNuova') caricaVendite(); });
+
+/* ---------- Catalogo (negoziante / admin) ---------- */
+const escH = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const n2 = x => (Number(x) || 0).toFixed(2).replace('.', ',');
+const qCsv = s => '"' + String(s).replace(/"/g, '""') + '"';
+function scarica(nome, righe) {
+  const blob = new Blob(['\ufeff' + righe.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; a.click();
+}
+function setCatalogo(cat) {
+  S.catalogo = cat;
+  $('catList').innerHTML = cat.map(c => `<option value="${escH(c.gioco)}">`).join('');
+  renderCat();
+}
+function vendRFiera() { const f = $('rFiera').value; return S.vendite.filter(v => !f || f === '*' || v.fiera === f); }
+function aggregato() {
+  const V = vendRFiera(), m = {};
+  V.forEach(v => { const k = v.gioco.toLowerCase(); m[k] = m[k] || {q: 0, inc: 0, pd: 0}; m[k].q += v.qta; m[k].inc += v.incassato; m[k].pd += v.pandragon; });
+  return m;
+}
+function renderCat() {
+  if ($('tCat').hidden && S.ruolo === 'venditore') return;
+  const m = aggregato(), V = vendRFiera();
+  const pezzi = S.catalogo.reduce((a, c) => a + c.pezzi, 0), vend = V.reduce((a, v) => a + v.qta, 0);
+  const valRest = S.catalogo.reduce((a, c) => a + Math.max(0, c.pezzi - ((m[c.gioco.toLowerCase()] || {}).q || 0)) * c.listino, 0);
+  $('cStats').innerHTML = [['Titoli', S.catalogo.length], ['Pezzi consegnati', pezzi], ['Pezzi venduti', vend],
+    ['Quota Pandragon', eur(V.reduce((a, v) => a + v.pandragon, 0))], ['Valore rimanente (listino)', eur(valRest)]]
+    .map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  const q = $('cCerca').value.trim().toLowerCase();
+  $('cRows').innerHTML = S.catalogo.filter(c => !q || c.gioco.toLowerCase().includes(q)).map(c => {
+    const v = (m[c.gioco.toLowerCase()] || {}).q || 0;
+    return `<tr><td class="g">${escH(c.gioco)}${c.gdr ? ' <span class="hint">GDR</span>' : ''}</td><td class="num">${c.listino ? eur(c.listino) : '—'}</td>
+      <td class="num">${c.pezzi}</td><td class="num">${v || '—'}</td><td class="num">${c.pezzi - v}</td>
+      <td><button class="link" data-ed="${escH(c.gioco)}" title="Modifica">✎</button><button class="link" data-cdel="${escH(c.gioco)}" title="Elimina">✕</button></td></tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--mut)">Nessun titolo</td></tr>';
+}
+function resetForm() {
+  S.edit = null; ['cGioco', 'cPrezzo', 'cPezzi'].forEach(k => $(k).value = ''); $('cGdr').checked = false;
+  $('fTitle').textContent = 'Aggiungi titolo'; $('bCatAnn').hidden = true;
+}
+$('bCatSalva').onclick = async () => {
+  const item = {gioco: $('cGioco').value.trim(), listino: Number($('cPrezzo').value) || 0, pezzi: Number($('cPezzi').value) || 0, gdr: $('cGdr').checked};
+  if (!item.gioco) return msg($('cMsg'), 'Inserisci il titolo');
+  $('bCatSalva').disabled = true;
+  try {
+    const j = await call('cat_save', {item, vecchioNome: S.edit || ''});
+    setCatalogo(j.catalogo); msg($('cMsg'), `Salvato: ${item.gioco}`, true); resetForm();
+  } catch (e) { msg($('cMsg'), e.message); } finally { $('bCatSalva').disabled = false; }
+};
+$('bCatAnn').onclick = resetForm;
+$('cCerca').oninput = renderCat; $('rFiera').onchange = renderCat;
+$('cRows').onclick = async e => {
+  const ed = e.target.dataset.ed, del = e.target.dataset.cdel;
+  if (ed) {
+    const c = S.catalogo.find(x => x.gioco === ed); S.edit = c.gioco;
+    $('cGioco').value = c.gioco; $('cPrezzo').value = c.listino || ''; $('cPezzi').value = c.pezzi; $('cGdr').checked = c.gdr;
+    $('fTitle').textContent = 'Modifica titolo'; $('bCatAnn').hidden = false; $('cGioco').scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
+  if (del) {
+    if (!confirm(`Eliminare "${del}" dal catalogo? Le vendite già registrate restano.`)) return;
+    try { setCatalogo((await call('cat_del', {gioco: del})).catalogo); } catch (err) { msg($('cMsg'), err.message); }
+  }
+};
+
+function parseLista(txt) {
+  const lines = txt.replace(/^\ufeff/, '').split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  const d = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+  const split = l => { const o = []; let cur = '', inq = false;
+    for (let i = 0; i < l.length; i++) { const ch = l[i];
+      if (ch === '"') { if (inq && l[i + 1] === '"') { cur += '"'; i++; } else inq = !inq; }
+      else if (ch === d && !inq) { o.push(cur); cur = ''; } else cur += ch; }
+    o.push(cur); return o.map(x => x.trim()); };
+  const num = x => { x = String(x || '').replace(/[€\s]/g, ''); if (!x) return 0; return Number(x.includes(',') ? x.replace(/\./g, '').replace(',', '.') : x) || 0; };
+  let rows = lines.map(split);
+  if (/titolo|gioco|nome/i.test(rows[0][0]) && !num(rows[0][1])) rows = rows.slice(1);
+  return rows.filter(r => r[0]).map(r => ({gioco: r[0], listino: num(r[1]), pezzi: Math.round(num(r[2])), gdr: /^s/i.test(r[3] || '')}));
+}
+function anteprima() {
+  const L = parseLista($('iTxt').value);
+  $('iPrev').textContent = L.length ? `${L.length} titoli riconosciuti · es. ${L[0].gioco} – ${eur(L[0].listino)} – ${L[0].pezzi} pz` : '';
+}
+$('iTxt').oninput = anteprima;
+$('iFile').onchange = async () => { const f = $('iFile').files[0]; if (f) { $('iTxt').value = await f.text(); anteprima(); } };
+$('bImp').onclick = async () => {
+  const items = parseLista($('iTxt').value);
+  if (!items.length) return msg($('iMsg'), 'Nessun titolo riconosciuto');
+  const sost = $('iSost').checked;
+  if (sost && !confirm(`Sostituire l’intero catalogo con ${items.length} titoli?`)) return;
+  $('bImp').disabled = true;
+  try {
+    const j = await call('cat_import', {items, sostituisci: sost});
+    setCatalogo(j.catalogo); $('iTxt').value = ''; $('iFile').value = ''; $('iSost').checked = false; anteprima();
+    msg($('iMsg'), `Importazione completata: ${j.esito.nuovi} nuovi, ${j.esito.aggiornati} aggiornati, ${j.esito.totale} titoli in catalogo`, true);
+  } catch (e) { msg($('iMsg'), e.message); } finally { $('bImp').disabled = false; }
+};
+$('bRend').onclick = () => {
+  const m = aggregato(), f = $('rFiera').value;
+  const out = [['Titolo', 'Listino', 'Pezzi consegnati', 'Venduti', 'Da restituire', 'Incassato', 'Quota Pandragon'].join(';')];
+  const nomi = new Set(S.catalogo.map(c => c.gioco.toLowerCase())); let T = [0, 0, 0, 0, 0];
+  S.catalogo.forEach(c => { const a = m[c.gioco.toLowerCase()] || {q: 0, inc: 0, pd: 0};
+    out.push([qCsv(c.gioco), n2(c.listino), c.pezzi, a.q, c.pezzi - a.q, n2(a.inc), n2(a.pd)].join(';'));
+    T = [T[0] + c.pezzi, T[1] + a.q, T[2] + c.pezzi - a.q, T[3] + a.inc, T[4] + a.pd]; });
+  Object.entries(m).filter(([k]) => !nomi.has(k)).forEach(([k, a]) => {
+    const g = vendRFiera().find(v => v.gioco.toLowerCase() === k).gioco;
+    out.push([qCsv(g + ' (fuori catalogo)'), '', '', a.q, '', n2(a.inc), n2(a.pd)].join(';')); T[1] += a.q; T[3] += a.inc; T[4] += a.pd; });
+  out.push(['TOTALE', '', T[0], T[1], T[2], n2(T[3]), n2(T[4])].join(';'));
+  scarica(`rendiconto_pandragon_${(f === '*' || !f ? 'tutte' : f).replace(/\W+/g, '_')}_${new Date().toLocaleDateString('sv-SE')}.csv`, out);
+};
+$('bCatCsv').onclick = () => {
+  const out = [['Titolo', 'Prezzo listino', 'Pezzi', 'GDR'].join(';')];
+  S.catalogo.forEach(c => out.push([qCsv(c.gioco), n2(c.listino), c.pezzi, c.gdr ? 'SÌ' : 'NO'].join(';')));
+  scarica(`catalogo_${new Date().toLocaleDateString('sv-SE')}.csv`, out);
+};
 document.querySelectorAll('#pay button').forEach(b => b.onclick = () => {
   S.pag = b.textContent; document.querySelectorAll('#pay button').forEach(x => x.setAttribute('aria-pressed', x === b));
 });
